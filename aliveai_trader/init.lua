@@ -47,71 +47,75 @@ end
 
 
 aliveai.create_bot({
-		name="trader",
-		texture="aliveai_trader.png",
-		building=0,
-		annoyed_by_staring=0,
-		hp=40,
-		name_color="ffff00",
-	on_step=function(self,dtime)
-		if self.offering then
-			aliveai.rndwalk(self,false)
-			aliveai.stand(self)
-			return self
-		end
-	end,
-	on_click=function(self,clicker)
-		if not self.trader then
-			aliveai.say(self,"sorry, have no offer... try again")
-			self.on_spawn(self)
-		end
-		self.offering=true
-		aliveai.lookat(self,clicker:getpos())
-		aliveai_trader.form(self,clicker)
-	end,
-	on_spawn=function(self)
-			self.botname="Trader: " .. self.botname
-			self.object:set_properties({nametag=self.botname,nametag_color="#" .. self.botname})
-			self.trader_inventory={}
-			self.trader={}
-			self.trader_select=1
-			local count=0
-			local c=1
-			aliveai.showstatus(self,"creating offer")
-			for i=0,20,1 do
-				for i, v in pairs(minetest.registered_items) do
-					if math.random(1,10)==1 and not self.trader_inventory[i] and minetest.get_item_group(i, "not_in_creative_inventory")==0 and minetest.get_all_craft_recipes(i) then
-						count=count+1
-						self.trader_inventory[i]=1
-						if count>=20 then break end
-					end
-				end
-				if count>=20 then break end
-			end
-			if count<1 then
-				self.trader_inventory=nil 
-				aliveai.showstatus(self,"failed to create offer")
-				return self
-			end
-			count=0
-			for i=0,20,1 do
-				for i, v in pairs(minetest.registered_items) do
-					if math.random(1,20)==1 and not self.trader_inventory[i] and minetest.get_item_group(i, "not_in_creative_inventory")==0 and minetest.get_all_craft_recipes(i) then
-						count=count+1
-						c=math.random(5,20)
-						if v.stack_max<10 then c=aliveai.random(1,v.stack_max) end
-						self.trader[i]=c
-						if count>=10 then return self end
-					end
-				end
-			end
-			if count<1 then
-				self.trader_inventory=nil
-				self.trader=nil
-				aliveai.showstatus(self,"failed to create prices")
-				return self
-			end
-	end,
+    name="trader",
+    texture="aliveai_trader.png",
+    building=0,
+    annoyed_by_staring=0,
+    hp=40,
+    name_color="ffff00",
+
+    on_step = function(self, dtime)
+        -- 1. Essential Existence Check
+        if not self.object or self.object:get_pos() == nil then return end
+
+        -- 2. Wrap logic in pcall (Protected Call)
+        local status, err = pcall(function()
+            if self.offering then
+                aliveai.rndwalk(self, false)
+                aliveai.stand(self)
+            end
+        end)
+
+        if not status then
+            minetest.log("error", "[aliveai] Trader error: " .. tostring(err))
+            self.offering = nil
+        end
+    end,
+
+    on_click = function(self, clicker)
+        if not self.trader then
+            aliveai.say(self, "sorry, have no offer... try again")
+            self.on_spawn(self)
+        end
+        self.offering = true
+        aliveai.lookat(self, clicker:get_pos())
+        aliveai_trader.form(self, clicker)
+    end,
+
+    on_spawn = function(self)
+        if not self or not self.object then return end
+        self.botname = "Trader: " .. (self.botname or "Unknown")
+        self.object:set_properties({nametag = self.botname, nametag_color = "#" .. self.botname})
+        self.trader_inventory = {}
+        self.trader = {}
+
+        -- Safe Iteration
+        for i, def in pairs(minetest.registered_items) do
+            if def and not def.groups.not_in_creative_inventory then
+                self.trader_select = 1
+                local count = 0
+                aliveai.showstatus(self, "creating offer")
+
+                -- Attempt to populate inventory
+                for x = 0, 20 do
+                    for name, v in pairs(minetest.registered_items) do
+                        if math.random(1, 10) == 1 and not self.trader_inventory[name] and minetest.get_item_group(name, "not_in_creative_inventory") == 0 and minetest.get_all_craft_recipes(name) then
+                            count = count + 1
+                            self.trader_inventory[name] = 1
+                            if count >= 20 then break end
+                        end
+                    end
+                    if count >= 20 then break end
+                end
+
+                if count < 1 then
+                    self.trader_inventory = nil
+                    aliveai.showstatus(self, "failed to create offer")
+                    return
+                end
+            end
+        end
+    end
 })
 aliveai_trader.form=function(self,player)
 	local c=0
@@ -151,6 +155,12 @@ minetest.register_on_player_receive_fields(function(player, form, pressed)
 	if form=="aliveai_trader.form" then
 		local name=player:get_player_name()
 		local self=aliveai_trader.user[name]
+		
+		-- CRITICAL CHECK: Does the bot still exist in the world?
+        		if not self or not self.object or not self.object:get_pos() then
+            		aliveai_trader.user[name] = nil
+            		return
+        		end
 
 		if pressed.quit or not (self and self.object) then
 			if self and self.offering then self.offering=nil end
@@ -371,12 +381,24 @@ aliveai.create_bot({
 		aliveai.lookat(self,clicker:getpos())
 		aliveai_trader.form2(self,clicker)
 	end,
-	on_step=function(self,dtime)
-		if self.offering then
-			aliveai.rndwalk(self,false)
-			aliveai.stand(self)
-			return self
-		end
+	on_step = function(self, dtime)
+	    -- 1. Essential Existence Check
+	    if not self.object or self.object:get_pos() == nil then return end
+
+	    -- 2. Wrap logic in pcall (Protected Call)
+	    local status, err = pcall(function()
+	        -- Your existing logic goes here
+	        if self.offering then
+	            aliveai.rndwalk(self, false)
+	            aliveai.stand(self)
+	        end
+	    end)
+
+    if not status then
+        minetest.log("error", "[aliveai] Trader error: " .. tostring(err))
+        self.offering = nil -- Reset state to try and recover
+    end
+
 --path
 		if self.work_path and self.path then
 			aliveai.path(self)
@@ -483,5 +505,6 @@ aliveai.create_bot({
 			end
 			return
 		end
-	end,
+	end,	
+
 })
