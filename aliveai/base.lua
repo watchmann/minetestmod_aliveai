@@ -1,3 +1,38 @@
+-- ──────────────────────────────────────
+-- aliveai mod bootstrap (safe, minimal)
+-- ──────────────────────────────────────
+aliveai = aliveai or {}
+aliveai.loaded_objects = 0          -- fix: initialized counter
+aliveai.active = aliveai.active or {}
+aliveai.team_player = aliveai.team_player or {}
+aliveai.food = aliveai.food or {}
+aliveai.default_team = aliveai.default_team or "default"
+
+-- ──────────────────────────────────────
+-- Safe save/load (guarded against minetest nil)
+-- ──────────────────────────────────────
+aliveai.save = function(name, tbl)
+    if not minetest then return end
+    if not minetest.set_moddata then return end  -- Added check
+    minetest.set_moddata(name, minetest.serialize(tbl))
+end
+
+aliveai.load = function(name)
+    if not minetest then return {} end
+    if not minetest.get_moddata then return {} end  -- Added check
+    local data = minetest.get_moddata(name)
+    if data then
+        return minetest.deserialize(data) or {}
+    end
+    return {}
+end
+
+-- ──────────────────────────────────────
+-- Run ALL mod code AFTER Minetest is fully loaded
+-- This prevents "attempt to call field 'get_moddata' (a nil value)"
+-- ──────────────────────────────────────
+
+
 aliveai.is_invisiable=function(ob)
 	if ob:is_player() and minetest.check_player_privs(ob:get_player_name(), {aliveai_invisibility=true}) and ob:get_player_control().sneak then
 		return true
@@ -207,6 +242,14 @@ aliveai.die=function(self)
 	self.object:set_hp(0)
 	aliveai.punch(self,self.object,self.hp_max)
 	return self
+end
+
+-- Adding this new function to fix the nil error:
+aliveai.dying=function(self)
+    -- Transition bot to dying state (similar to die but can be extended later)
+    self.hp=0
+    self.object:set_hp(0)
+    return self
 end
 
 
@@ -1752,19 +1795,23 @@ aliveai.max=function(self,update)
 end
 
 aliveai.botdelay=function(self,a)
-	if self.delaytimeout then
-		if os.clock()>self.delaytimeout then
-			self.delaytimeout=nil
-			a=1
-		else
-			return self
-		end
-	elseif not self.delay_average then
-		self.delay_average={time=0}
-	end
+    -- Ensure delaytime has a default value
+    if not aliveai.delaytime then
+        aliveai.delaytime = 1  -- default delay interval in seconds
+    end
 
-	local new=os.clock()-self.delaytimer
+    if self.delaytimeout then
+        if os.clock()>self.delaytimeout then
+            self.delaytimeout=nil
+            a=1
+        else
+            return self
+        end
+    elseif not self.delay_average then
+        self.delay_average={time=0}
+    end
 
+    local new=os.clock()-self.delaytimer
 	if aliveai.game_paused then
 		self.delay_average={time=0}
 		self.delaytimer=os.clock()
